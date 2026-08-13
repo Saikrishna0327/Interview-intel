@@ -1,0 +1,193 @@
+// lib/meetstream.ts
+//
+// This file is our "phone line" to MeetStream.
+// MeetStream is the service that sends a robot ("bot") into a video call.
+// The bot listens, records, and writes down who said what (a "transcript").
+//
+// Everything that talks to MeetStream lives HERE, in one place.
+// Why one place? If MeetStream ever changes an address or a rule, we fix it
+// once here, not in ten different files.
+//
+// A quick word list (we use the same word every time):
+// - "endpoint" = one web address we send a request to (like a phone number).
+// - "request"  = the message we send out.
+// - "response" = the message we get back.
+// - "bot_id"   = the ID MeetStream gives each bot. We save it so we can later
+//                tell that exact bot to leave.
+
+// The base address for ALL MeetStream calls.
+// Every endpoint below is glued onto the end of this.
+// NOTE: the real path has "/api/v1" in it. (The CLAUDE.md draft said "/v1"
+// with no "/api" — that was wrong. This is the verified one.)
+const MEETSTREAM_BASE_URL = "https://api.meetstream.ai/api/v1";
+
+// Our secret key. It proves the request is really from us.
+// We never write the key in the code. We read it from the environment
+// (the .env file). `process.env` is the box that holds those secret values.
+const MEETSTREAM_API_KEY = process.env.MEETSTREAM_API_KEY;
+
+// A small helper that builds the headers for every request.
+// "Headers" are extra notes attached to a request, like the label on an envelope.
+//
+// IMPORTANT (MeetStream detail): the auth header is
+//     Authorization: Token <key>
+// It is the word "Token", NOT "Bearer". Many APIs use "Bearer", so this is an
+// easy mistake. MeetStream will reject the request if you use the wrong word.
+function meetstreamHeaders(): HeadersInit {
+  if (!MEETSTREAM_API_KEY) {
+    // If the key is missing, we stop early with a clear message.
+    // This is kinder than a confusing error later.
+    throw new Error("MEETSTREAM_API_KEY is missing. Add it to your .env file.");
+  }
+  return {
+    Authorization: `Token ${MEETSTREAM_API_KEY}`,
+    "Content-Type": "application/json", // tells MeetStream we are sending JSON.
+  };
+}
+
+// The "shape" of what we pass in when we schedule a bot.
+// (A shape / interface is just a promise about which fields exist.)
+export interface ScheduleBotInput {
+  meetingUrl: string; // the video call link (Google Meet, Zoom, or Teams).
+  botName: string; // the name shown in the call, e.g. "Interview Notetaker".
+  joinAt?: string; // OPTIONAL. When the bot should join, as an ISO time string
+  //                  (e.g. "2026-08-08T14:00:00Z"). Leave it out to join now.
+}
+
+// The "shape" of the useful part MeetStream sends back.
+// We mostly care about the bot_id.
+export interface ScheduleBotResult {
+  bot_id: string;
+}
+
+// --------------------------------------------------------------------------
+// 1) TURN THE BOT ON  ->  POST /bots/create_bot
+// --------------------------------------------------------------------------
+//
+// This asks MeetStream to send a bot into a meeting.
+// "POST" means "here is some data, please create something with it."
+// MeetStream creates the bot and replies with a bot_id. We return that id so
+// the caller can save it in the database.
+export async function scheduleBot(
+  input: ScheduleBotInput
+): Promise<ScheduleBotResult> {
+  // The body is the data we send. `JSON.stringify` turns our object into text,
+  // because the internet sends text, not JavaScript objects.
+  //
+  // NOTE: field names here (meeting_link, bot_name, join_at, callback_url)
+  // follow the MeetStream docs. If a field name is rejected, check the docs
+  // for the exact spelling — MeetStream is the source of truth.
+  const body = JSON.stringify({
+    meeting_link: input.meetingUrl,
+    bot_name: input.botName,
+    // When to join. If joinAt is not given, MeetStream joins right away.
+    join_at: input.joinAt,
+    // We WANT the transcript, so we ask MeetStream to transcribe.
+    transcription_required: true,
+    // Where MeetStream should send its progress messages ("webhooks").
+    // We build our receiver later at /api/webhooks/meetstream.
+    callback_url: `${process.env.APP_BASE_URL}/api/webhooks/meetstream`,
+  });
+
+  // `fetch` sends the request over the internet and waits for the reply.
+  // `await` means "pause here until the reply comes back".
+  const response = await fetch(`${MEETSTREAM_BASE_URL}/bots/create_bot`, {
+    method: "POST",
+    headers: meetstreamHeaders(),
+    body,
+  });
+
+  // If MeetStream says "no" (any status that is not OK), we stop with details.
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `MeetStream create_bot failed (${response.status}): ${text}`
+    );
+  }
+
+  // Turn the reply text back into an object we can read.
+  const data = (await response.json()) as ScheduleBotResult;
+  return data;
+}
+
+// --------------------------------------------------------------------------
+// 2) TURN THE BOT OFF, MEETING ALREADY LIVE  ->  GET /bots/{bot_id}/remove_bot
+// --------------------------------------------------------------------------
+//
+// Use this when the bot is ALREADY inside a call and you want it to leave.
+// "GET" normally means "just read something", but MeetStream uses GET here to
+// trigger the leave. We follow their rule.
+export async function removeLiveBot(botId: string): Promise<void> {
+  const response = await fetch(
+    `${MEETSTREAM_BASE_URL}/bots/${botId}/remove_bot`,
+    {
+      method: "GET",
+      headers: meetstreamHeaders(),
+    }
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `MeetStream remove_bot failed (${response.status}): ${text}`
+    );
+  }
+}
+
+// --------------------------------------------------------------------------
+// 3) TURN THE BOT OFF, MEETING NOT STARTED YET  ->  DELETE delete-scheduled-bot
+// --------------------------------------------------------------------------
+//
+// Use this when the meeting has NOT started and the bot is only scheduled.
+// "DELETE" means "remove this thing before it happens."
+// So: bot already in the call  -> removeLiveBot (GET remove_bot).
+//     bot only scheduled        -> deleteScheduledBot (DELETE).
+export async function deleteScheduledBot(botId: string): Promise<void> {
+  const response = await fetch(
+    `${MEETSTREAM_BASE_URL}/bots/${botId}/delete-scheduled-bot`,
+    {
+      method: "DELETE",
+      headers: meetstreamHeaders(),
+    }
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `MeetStream delete-scheduled-bot failed (${response.status}): ${text}`
+    );
+  }
+}
+
+// --------------------------------------------------------------------------
+// 4) GET THE FINISHED TRANSCRIPT  ->  GET /transcript/{transcript_id}/get_transcript
+// --------------------------------------------------------------------------
+//
+// After the call, MeetStream sends us a webhook event named
+// "transcription.processed". That event carries a transcript_id.
+// We take that id and ask for the full text here.
+//
+// "Diarized" means the text is split by speaker (who said each line).
+// That is exactly what we feed to Gemini later.
+export async function getTranscript(transcriptId: string): Promise<string> {
+  const response = await fetch(
+    `${MEETSTREAM_BASE_URL}/transcript/${transcriptId}/get_transcript`,
+    {
+      method: "GET",
+      headers: meetstreamHeaders(),
+    }
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `MeetStream get_transcript failed (${response.status}): ${text}`
+    );
+  }
+
+  // MeetStream returns the transcript as JSON. The exact shape can vary, so we
+  // return it as a text string that our Gemini step can read.
+  // (When you see the real reply, we can shape this more exactly together.)
+  const data = await response.json();
+  return typeof data === "string" ? data : JSON.stringify(data);
+}

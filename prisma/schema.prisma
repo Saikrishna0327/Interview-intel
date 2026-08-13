@@ -1,0 +1,70 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  name               String?
+  image              String?
+  googleAccessToken  String?
+  googleRefreshToken String?
+  googleTokenExpiry  DateTime?
+  createdAt          DateTime  @default(now())
+
+  meetings InterviewMeeting[]
+}
+
+model InterviewMeeting {
+  id              String   @id @default(cuid())
+  googleEventId   String   @unique
+  title           String
+  startTime       DateTime
+  meetingUrl      String
+  botEnabled      Boolean  @default(false)
+  meetstreamBotId String?
+  status          String   @default("SCHEDULED")
+  createdAt       DateTime @default(now())
+
+  userId    String
+  user      User                 @relation(fields: [userId], references: [id])
+  scorecard InterviewScorecard?
+}
+
+enum Recommendation {
+  STRONG_HIRE
+  HIRE
+  NO_HIRE
+  NEEDS_FOLLOWUP
+}
+
+model InterviewScorecard {
+  id                    String         @id @default(cuid())
+  candidateNameInferred String
+  overallRecommendation Recommendation
+  summary               String
+
+  // Each of these is a JSON array under the hood, but kept as its own named
+  // field (matching the HRScorecard shape from Gemini) instead of one big blob,
+  // so the app can pull "skills" or "red flags" out directly without digging.
+  skillsMentioned            Json // { skill, yearsOrProficiency?, context }[]
+  advantages                 Json // string[]
+  disadvantagesOrRedFlags    Json // string[]
+  coreCompetenciesEvaluated  Json // { competency, score1to5, evidence }[]
+  suggestedFollowUpQuestions Json // string[]
+
+  rawTranscript String
+  createdAt     DateTime @default(now())
+
+  meetingId String           @unique
+  meeting   InterviewMeeting @relation(fields: [meetingId], references: [id])
+}
