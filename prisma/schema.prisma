@@ -2,11 +2,11 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider      = "prisma-client"
-  output        = "../app/generated/prisma"
+  // The standard Prisma client. It generates into node_modules/@prisma/client,
+  // which Next.js and Vercel know how to bundle automatically (engine included).
+  provider      = "prisma-client-js"
   // "native"            = the engine for your own computer (Windows), used in dev.
   // "rhel-openssl-3.0.x" = the engine for Vercel's Linux servers, used in production.
-  // Listing both means `prisma generate` builds the engine Vercel needs.
   binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 

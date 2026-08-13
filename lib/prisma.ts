@@ -5,7 +5,7 @@
 // database would refuse us. So we keep one client on the global object and
 // reuse it.
 
-import { PrismaClient } from "@/app/generated/prisma/client";
+import { PrismaClient } from "@prisma/client";
 
 // `globalThis` is a box that survives code reloads in development.
 // We store our one client inside it.
