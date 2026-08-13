@@ -12,6 +12,7 @@ import { auth, signOut } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getUpcomingMeetings, type UpcomingMeeting } from "@/lib/calendar";
 import MeetingToggle from "./MeetingToggle";
+import MeetingTime from "./MeetingTime";
 
 // A nice label + color for each video provider.
 const providerLabel: Record<UpcomingMeeting["provider"], string> = {
@@ -111,7 +112,6 @@ export default async function DashboardPage() {
             {meetings.map((meeting) => {
               const savedRow = savedByEventId.get(meeting.googleEventId);
               const hasScorecard = Boolean(savedRow?.scorecard);
-              const start = new Date(meeting.startTime);
 
               return (
                 <li
@@ -123,7 +123,8 @@ export default async function DashboardPage() {
                       {meeting.title}
                     </p>
                     <p className="mt-0.5 text-sm text-zinc-500">
-                      {start.toLocaleString()} · {providerLabel[meeting.provider]}
+                      <MeetingTime iso={meeting.startTime} /> ·{" "}
+                      {providerLabel[meeting.provider]}
                     </p>
                     {hasScorecard && savedRow && (
                       <Link
