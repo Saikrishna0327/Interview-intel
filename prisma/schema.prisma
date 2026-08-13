@@ -2,8 +2,12 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client"
-  output   = "../app/generated/prisma"
+  provider      = "prisma-client"
+  output        = "../app/generated/prisma"
+  // "native"            = the engine for your own computer (Windows), used in dev.
+  // "rhel-openssl-3.0.x" = the engine for Vercel's Linux servers, used in production.
+  // Listing both means `prisma generate` builds the engine Vercel needs.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
