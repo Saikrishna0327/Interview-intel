@@ -14,15 +14,15 @@ export default async function Home() {
   if (session?.userId) redirect("/dashboard");
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 px-6 dark:bg-zinc-950">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-zinc-950 px-6">
       <div className="w-full max-w-md text-center">
-        <p className="mb-3 inline-block rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-orange-800 dark:bg-orange-950 dark:text-orange-300">
+        <p className="mb-3 inline-block rounded-full bg-orange-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-orange-400">
           For HR &amp; hiring teams
         </p>
-        <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-          Interview Intelligence
+        <h1 className="text-3xl font-bold tracking-tight text-white">
+          Interview <span className="text-orange-500">Intelligence</span>
         </h1>
-        <p className="mt-3 text-zinc-600 dark:text-zinc-400">
+        <p className="mt-3 text-zinc-400">
           A notetaker bot joins your recruiting calls, writes the transcript, and
           turns it into a clear HR scorecard — skills, red flags, and a hire
           recommendation.

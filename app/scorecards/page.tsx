@@ -43,14 +43,14 @@ export default async function ScorecardsPage() {
 
   return (
     <main className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
-      {/* Header (matches the dashboard) */}
-      <header className="border-b border-zinc-200 dark:border-zinc-800">
+      {/* Header — black bar with an orange brand accent (matches the dashboard). */}
+      <header className="bg-zinc-950 border-b-2 border-orange-500">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
           <div>
-            <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-              Interview Intelligence
+            <h1 className="text-lg font-semibold text-white">
+              Interview <span className="text-orange-500">Intelligence</span>
             </h1>
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-zinc-400">
               Signed in as {session.user?.email}
             </p>
           </div>
@@ -58,7 +58,7 @@ export default async function ScorecardsPage() {
             {/* Link back to the upcoming meetings page. */}
             <Link
               href="/dashboard"
-              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm font-medium text-zinc-200 hover:bg-zinc-800"
             >
               Upcoming
             </Link>
@@ -68,7 +68,7 @@ export default async function ScorecardsPage() {
                 await signOut({ redirectTo: "/" });
               }}
             >
-              <button className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800">
+              <button className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm font-medium text-zinc-200 hover:bg-zinc-800">
                 Sign out
               </button>
             </form>
