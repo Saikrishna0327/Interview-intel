@@ -111,13 +111,23 @@ export async function scheduleBot(
 }
 
 // --------------------------------------------------------------------------
-// 2) TURN THE BOT OFF, MEETING ALREADY LIVE  ->  GET /bots/{bot_id}/remove_bot
+// 2) TURN THE BOT OFF  ->  GET /bots/{bot_id}/remove_bot
 // --------------------------------------------------------------------------
 //
-// Use this when the bot is ALREADY inside a call and you want it to leave.
+// This is the ONE address MeetStream gives us to take a bot away. It works
+// both ways: if the bot is already in the call, it leaves; if the bot is only
+// scheduled and has not joined yet, this cancels it. So we use it for every
+// "turn off", and we do NOT need a separate "delete-scheduled-bot" address.
+// (An earlier version called "delete-scheduled-bot". MeetStream answered
+//  404 "Not Found" because that address does not exist. That was the bug.)
+//
 // "GET" normally means "just read something", but MeetStream uses GET here to
-// trigger the leave. We follow their rule.
-export async function removeLiveBot(botId: string): Promise<void> {
+// trigger the removal. We follow their rule.
+//
+// About the 404 below: if MeetStream has no bot with this id, there is simply
+// nothing to remove. For a "turn off" that is a success, not an error, so we
+// return quietly instead of throwing. This way the switch always turns off.
+export async function removeBot(botId: string): Promise<void> {
   const response = await fetch(
     `${MEETSTREAM_BASE_URL}/bots/${botId}/remove_bot`,
     {
@@ -126,35 +136,15 @@ export async function removeLiveBot(botId: string): Promise<void> {
     }
   );
 
+  // 404 = MeetStream does not know this bot (already gone). Treat as done.
+  if (response.status === 404) {
+    return;
+  }
+
   if (!response.ok) {
     const text = await response.text();
     throw new Error(
       `MeetStream remove_bot failed (${response.status}): ${text}`
-    );
-  }
-}
-
-// --------------------------------------------------------------------------
-// 3) TURN THE BOT OFF, MEETING NOT STARTED YET  ->  DELETE delete-scheduled-bot
-// --------------------------------------------------------------------------
-//
-// Use this when the meeting has NOT started and the bot is only scheduled.
-// "DELETE" means "remove this thing before it happens."
-// So: bot already in the call  -> removeLiveBot (GET remove_bot).
-//     bot only scheduled        -> deleteScheduledBot (DELETE).
-export async function deleteScheduledBot(botId: string): Promise<void> {
-  const response = await fetch(
-    `${MEETSTREAM_BASE_URL}/bots/${botId}/delete-scheduled-bot`,
-    {
-      method: "DELETE",
-      headers: meetstreamHeaders(),
-    }
-  );
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(
-      `MeetStream delete-scheduled-bot failed (${response.status}): ${text}`
     );
   }
 }

@@ -11,11 +11,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import {
-  scheduleBot,
-  removeLiveBot,
-  deleteScheduledBot,
-} from "@/lib/meetstream";
+import { scheduleBot, removeBot } from "@/lib/meetstream";
 
 // The shape of the data the dashboard sends us.
 interface ToggleBody {
@@ -75,16 +71,10 @@ export async function POST(request: Request) {
         where: { googleEventId: body.googleEventId },
       });
 
-      // If we have a bot id, tell MeetStream to remove it.
-      // If the meeting has not started, cancel the scheduled bot.
-      // If it is already live, pull the live bot out.
+      // If we have a bot id, tell MeetStream to remove it. The same address
+      // works whether the bot is only scheduled or already in the call.
       if (existing?.meetstreamBotId) {
-        const notStartedYet = new Date(body.startTime) > new Date();
-        if (notStartedYet) {
-          await deleteScheduledBot(existing.meetstreamBotId);
-        } else {
-          await removeLiveBot(existing.meetstreamBotId);
-        }
+        await removeBot(existing.meetstreamBotId);
       }
 
       // Mark it off in our database.
