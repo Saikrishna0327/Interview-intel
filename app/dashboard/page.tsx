@@ -138,7 +138,7 @@ export default async function DashboardPage() {
                     {hasScorecard && savedRow && (
                       <Link
                         href={`/scorecard/${savedRow.id}`}
-                        className="mt-1 inline-block text-sm font-medium text-teal-700 hover:underline dark:text-teal-400"
+                        className="mt-1 inline-block text-sm font-medium text-orange-700 hover:underline dark:text-orange-400"
                       >
                         View scorecard →
                       </Link>

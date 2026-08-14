@@ -21,7 +21,7 @@ import MeetingTime from "../dashboard/MeetingTime";
 const recStyle: Record<HRScorecard["overallRecommendation"], string> = {
   STRONG_HIRE:
     "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
-  HIRE: "bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300",
+  HIRE: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
   NEEDS_FOLLOWUP:
     "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
   NO_HIRE: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
@@ -101,7 +101,7 @@ export default async function ScorecardsPage() {
                 {/* The whole card is a link to the full scorecard. */}
                 <Link
                   href={`/scorecard/${sc.meetingId}`}
-                  className="block rounded-xl border border-zinc-200 bg-white p-4 transition hover:border-teal-400 hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-teal-600"
+                  className="block rounded-xl border border-zinc-200 bg-white p-4 transition hover:border-orange-400 hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-orange-600"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -130,7 +130,7 @@ export default async function ScorecardsPage() {
                     {sc.summary}
                   </p>
 
-                  <span className="mt-2 inline-block text-sm font-medium text-teal-700 dark:text-teal-400">
+                  <span className="mt-2 inline-block text-sm font-medium text-orange-700 dark:text-orange-400">
                     View full scorecard →
                   </span>
                 </Link>

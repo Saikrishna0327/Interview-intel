@@ -17,7 +17,7 @@ import type { HRScorecard } from "@/lib/types";
 const recStyle: Record<HRScorecard["overallRecommendation"], string> = {
   STRONG_HIRE:
     "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
-  HIRE: "bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300",
+  HIRE: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300",
   NEEDS_FOLLOWUP:
     "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
   NO_HIRE: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
@@ -102,14 +102,14 @@ export default async function ScorecardPage({
                   <span className="font-medium text-zinc-900 dark:text-zinc-50">
                     {c.competency}
                   </span>
-                  <span className="text-sm font-semibold text-teal-700 dark:text-teal-400">
+                  <span className="text-sm font-semibold text-orange-700 dark:text-orange-400">
                     {c.score1to5}/5
                   </span>
                 </div>
                 {/* A simple bar showing the score out of 5. */}
                 <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
                   <div
-                    className="h-full rounded-full bg-teal-600"
+                    className="h-full rounded-full bg-orange-600"
                     style={{ width: `${(c.score1to5 / 5) * 100}%` }}
                   />
                 </div>

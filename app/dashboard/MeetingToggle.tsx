@@ -67,8 +67,8 @@ export default function MeetingToggle({
         disabled={pending}
         aria-pressed={enabled}
         aria-label={enabled ? "Turn recording bot off" : "Turn recording bot on"}
-        className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-teal-500 disabled:opacity-50 ${
-          enabled ? "bg-teal-600" : "bg-zinc-300 dark:bg-zinc-700"
+        className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-orange-500 disabled:opacity-50 ${
+          enabled ? "bg-orange-600" : "bg-zinc-300 dark:bg-zinc-700"
         }`}
       >
         <span
