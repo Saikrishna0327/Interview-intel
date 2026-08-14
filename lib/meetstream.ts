@@ -26,6 +26,30 @@ const MEETSTREAM_BASE_URL = "https://api.meetstream.ai/api/v1";
 // (the .env file). `process.env` is the box that holds those secret values.
 const MEETSTREAM_API_KEY = process.env.MEETSTREAM_API_KEY;
 
+// Work out our own PUBLIC web address, so MeetStream can send webhooks back.
+// We try three sources, in order:
+//   1) APP_BASE_URL       -> what YOU set (e.g. http://localhost:3000 in dev).
+//   2) VERCEL_PROJECT_PRODUCTION_URL -> Vercel sets this for you automatically
+//      on the live site. It has no "https://", so we add it.
+//   3) VERCEL_URL         -> the per-deploy address, as a last resort.
+// This way the webhook works on Vercel even if you forget to set APP_BASE_URL.
+function resolveBaseUrl(): string {
+  if (process.env.APP_BASE_URL) {
+    return process.env.APP_BASE_URL;
+  }
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  }
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+  // Nothing found. We fail loudly, because a missing address means the
+  // transcript webhook would silently go nowhere.
+  throw new Error(
+    "No public base URL found. Set APP_BASE_URL (or deploy on Vercel)."
+  );
+}
+
 // A small helper that builds the headers for every request.
 // "Headers" are extra notes attached to a request, like the label on an envelope.
 //
@@ -113,7 +137,7 @@ export async function scheduleBot(
     recording_config,
     // Where MeetStream should send its progress messages ("webhooks").
     // Our receiver lives at /api/webhooks/meetstream.
-    callback_url: `${process.env.APP_BASE_URL}/api/webhooks/meetstream`,
+    callback_url: `${resolveBaseUrl()}/api/webhooks/meetstream`,
     // Include join_at ONLY when the meeting is still ahead of us.
     ...(joinInFuture ? { join_at: input.joinAt } : {}),
   });
