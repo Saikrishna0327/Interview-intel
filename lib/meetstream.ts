@@ -71,22 +71,51 @@ export interface ScheduleBotResult {
 export async function scheduleBot(
   input: ScheduleBotInput
 ): Promise<ScheduleBotResult> {
+  // How MeetStream should record and transcribe the call. This is the REAL way
+  // to turn transcription on (an earlier version sent "transcription_required:
+  // true", which is not a real field, so no transcript was ever made).
+  //   - retention: how long MeetStream keeps the recording.
+  //   - transcript.provider.deepgram: the speech-to-text engine settings.
+  //   - diarize: true  -> split the text by speaker (who said what). We NEED
+  //     this, because our Gemini scorecard reads "Interviewer:"/"Candidate:".
+  const recording_config = {
+    retention: { type: "timed", hours: 24 },
+    transcript: {
+      provider: {
+        deepgram: {
+          model: "nova-3",
+          language: "en",
+          diarize: true,
+          punctuate: true,
+          smart_format: true,
+          paragraphs: true,
+        },
+      },
+    },
+  };
+
+  // Decide WHEN the bot joins.
+  // MeetStream rule: if you send "join_at" (a future time), the bot waits and
+  // joins at that time. If you leave it out, the bot joins RIGHT NOW.
+  // So: for a meeting still in the future, we schedule it. For a meeting whose
+  // start time has already passed (e.g. a live call you are testing), we omit
+  // join_at so the bot joins immediately.
+  const joinInFuture =
+    Boolean(input.joinAt) && new Date(input.joinAt as string).getTime() > Date.now();
+
   // The body is the data we send. `JSON.stringify` turns our object into text,
   // because the internet sends text, not JavaScript objects.
-  //
-  // NOTE: field names here (meeting_link, bot_name, join_at, callback_url)
-  // follow the MeetStream docs. If a field name is rejected, check the docs
-  // for the exact spelling — MeetStream is the source of truth.
   const body = JSON.stringify({
     meeting_link: input.meetingUrl,
     bot_name: input.botName,
-    // When to join. If joinAt is not given, MeetStream joins right away.
-    join_at: input.joinAt,
-    // We WANT the transcript, so we ask MeetStream to transcribe.
-    transcription_required: true,
+    // We only need audio for a transcript, so video is off (lighter + faster).
+    video_required: false,
+    recording_config,
     // Where MeetStream should send its progress messages ("webhooks").
-    // We build our receiver later at /api/webhooks/meetstream.
+    // Our receiver lives at /api/webhooks/meetstream.
     callback_url: `${process.env.APP_BASE_URL}/api/webhooks/meetstream`,
+    // Include join_at ONLY when the meeting is still ahead of us.
+    ...(joinInFuture ? { join_at: input.joinAt } : {}),
   });
 
   // `fetch` sends the request over the internet and waits for the reply.
