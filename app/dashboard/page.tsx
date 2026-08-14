@@ -62,17 +62,26 @@ export default async function DashboardPage() {
               Signed in as {session.user?.email}
             </p>
           </div>
-          {/* Sign out uses a tiny server action. */}
-          <form
-            action={async () => {
-              "use server";
-              await signOut({ redirectTo: "/" });
-            }}
-          >
-            <button className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800">
-              Sign out
-            </button>
-          </form>
+          <div className="flex items-center gap-2">
+            {/* Link to the second page: all finished scorecards. */}
+            <Link
+              href="/scorecards"
+              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            >
+              Scorecards
+            </Link>
+            {/* Sign out uses a tiny server action. */}
+            <form
+              action={async () => {
+                "use server";
+                await signOut({ redirectTo: "/" });
+              }}
+            >
+              <button className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800">
+                Sign out
+              </button>
+            </form>
+          </div>
         </div>
       </header>
 
