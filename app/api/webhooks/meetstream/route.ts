@@ -4,20 +4,22 @@
 // something happens. MeetStream calls this address as the meeting progresses.
 //
 // We care most about the event named "transcription.processed".
-// That event means: "the transcript is ready, here is its id."
+// That event means: "this bot's transcript is ready." It does NOT carry the
+// transcript's id — we have to look that up ourselves (see step 5 below).
 // When we get it, we:
-//   1) fetch the full transcript from MeetStream,
-//   2) send it to Gemini to build the HR scorecard,
-//   3) save the scorecard in our database.
+//   1) look up the bot's own record to find its transcript_id,
+//   2) fetch the full transcript from MeetStream,
+//   3) send it to Gemini to build the HR scorecard,
+//   4) save the scorecard in our database.
 //
 // MeetStream event names we may receive (from the docs):
 //   bot.joining, bot.inmeeting, bot.stopped, audio.processed,
-//   transcription.processed  <-- the one we act on (has transcript_id),
+//   transcription.processed  <-- the one we act on,
 //   video.processed, data_deletion.
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getTranscript } from "@/lib/meetstream";
+import { getBotDetail, getTranscript } from "@/lib/meetstream";
 import { generateHRScorecard } from "@/lib/gemini";
 
 export async function POST(request: Request) {
@@ -44,37 +46,44 @@ export async function POST(request: Request) {
     payload.event ?? payload.event_type ?? payload.type ?? "";
   const botId: string | undefined =
     payload.bot_id ?? payload.botId ?? payload.data?.bot_id;
-  const transcriptId: string | undefined =
-    payload.transcript_id ??
-    payload.transcriptId ??
-    payload.data?.transcript_id;
 
-  // 3) We only act when the transcript is ready. For every other event we just
-  //    reply 200 (OK) so MeetStream knows we received it.
-  if (eventType !== "transcription.processed" || !transcriptId) {
+  // 3) We only act on the "transcript is ready" event. For every other event
+  //    we just reply 200 (OK) so MeetStream knows we received it.
+  //    NOTE: this event does NOT carry a transcript_id (MeetStream detail —
+  //    an earlier version of this code wrongly required one here, so it threw
+  //    away every real event). We only need the bot_id at this point; we look
+  //    up the transcript_id ourselves in step 5.
+  if (eventType !== "transcription.processed" || !botId) {
     return NextResponse.json({ received: true });
   }
 
   try {
     // 4) Find which meeting this bot belongs to (we saved the bot id earlier).
-    const meeting = botId
-      ? await prisma.interviewMeeting.findFirst({
-          where: { meetstreamBotId: botId },
-        })
-      : null;
+    const meeting = await prisma.interviewMeeting.findFirst({
+      where: { meetstreamBotId: botId },
+    });
 
     if (!meeting) {
-      // We got a transcript but do not know the meeting. Reply OK, do nothing.
+      // We got an event but do not know the meeting. Reply OK, do nothing.
       return NextResponse.json({ received: true, note: "meeting not found" });
     }
 
-    // 5) Fetch the full diarized transcript (who said what).
-    const transcript = await getTranscript(transcriptId);
+    // 5) Ask MeetStream for this bot's own detail record. The transcript_id
+    //    lives there, not in the webhook body.
+    const detail = await getBotDetail(botId);
+    if (!detail.transcript_id) {
+      // Transcription may still be finishing. Reply OK; a later event (or a
+      // retry) will carry it once it exists.
+      return NextResponse.json({ received: true, note: "transcript not ready yet" });
+    }
 
-    // 6) Send it to Gemini and get the structured HR scorecard back.
+    // 6) Fetch the full diarized transcript (who said what).
+    const transcript = await getTranscript(detail.transcript_id);
+
+    // 7) Send it to Gemini and get the structured HR scorecard back.
     const scorecard = await generateHRScorecard(transcript);
 
-    // 7) Save the scorecard. `upsert` avoids duplicates if MeetStream retries.
+    // 8) Save the scorecard. `upsert` avoids duplicates if MeetStream retries.
     await prisma.interviewScorecard.upsert({
       where: { meetingId: meeting.id },
       update: {
@@ -102,7 +111,7 @@ export async function POST(request: Request) {
       },
     });
 
-    // 8) Mark the meeting as done.
+    // 9) Mark the meeting as done.
     await prisma.interviewMeeting.update({
       where: { id: meeting.id },
       data: { status: "SCORECARD_READY" },

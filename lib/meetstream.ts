@@ -203,12 +203,43 @@ export async function removeBot(botId: string): Promise<void> {
 }
 
 // --------------------------------------------------------------------------
+// 3) LOOK UP A BOT'S OWN RECORD  ->  GET /bots/{bot_id}/detail
+// --------------------------------------------------------------------------
+//
+// IMPORTANT MeetStream detail: the "transcription.processed" webhook event
+// does NOT carry a transcript_id. (An earlier version of our code assumed it
+// did, so it silently threw every real event away — a bot could finish a
+// whole call and we would never notice.) The transcript_id only appears here,
+// inside the bot's OWN detail record, once transcription is finished. So the
+// correct order is: webhook says "something happened for bot X" -> we look
+// up bot X's detail -> that detail holds the transcript_id.
+export interface BotDetail {
+  transcript_id?: string;
+  [key: string]: unknown;
+}
+
+export async function getBotDetail(botId: string): Promise<BotDetail> {
+  const response = await fetch(`${MEETSTREAM_BASE_URL}/bots/${botId}/detail`, {
+    method: "GET",
+    headers: meetstreamHeaders(),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`MeetStream bot detail failed (${response.status}): ${text}`);
+  }
+
+  const data = (await response.json()) as { bot_details?: BotDetail } & BotDetail;
+  // The real fields live one level down, under "bot_details".
+  return data.bot_details ?? data;
+}
+
+// --------------------------------------------------------------------------
 // 4) GET THE FINISHED TRANSCRIPT  ->  GET /transcript/{transcript_id}/get_transcript
 // --------------------------------------------------------------------------
 //
-// After the call, MeetStream sends us a webhook event named
-// "transcription.processed". That event carries a transcript_id.
-// We take that id and ask for the full text here.
+// Once we have a transcript_id (from getBotDetail above), we ask for the
+// full text here.
 //
 // "Diarized" means the text is split by speaker (who said each line).
 // That is exactly what we feed to Gemini later.
