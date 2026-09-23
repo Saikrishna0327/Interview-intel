@@ -17,13 +17,28 @@ export interface UpcomingMeeting {
   provider: "google_meet" | "zoom" | "teams"; // which service it is.
 }
 
+// The small slice of Google's event fields we actually read.
+// (The real event object has many more fields; we only name the ones we use,
+// and mark them all optional, because Google does not always send them.)
+interface GoogleCalendarEvent {
+  id: string;
+  summary?: string;
+  hangoutLink?: string;
+  location?: string;
+  description?: string;
+  start?: { dateTime?: string; date?: string };
+  conferenceData?: {
+    entryPoints?: Array<{ entryPointType?: string; uri?: string }>;
+  };
+}
+
 // Look through one event's fields and find a video link, if any.
 // We check three places, in order:
 //   1) hangoutLink        -> Google Meet
 //   2) conferenceData     -> Meet/Zoom/Teams "entry points"
 //   3) location + description text -> a pasted Zoom or Teams URL
 function findVideoLink(
-  event: Record<string, any>
+  event: GoogleCalendarEvent
 ): { url: string; provider: UpcomingMeeting["provider"] } | null {
   // 1) Google Meet puts a ready link right here.
   if (event.hangoutLink) {
@@ -31,8 +46,7 @@ function findVideoLink(
   }
 
   // 2) conferenceData holds structured links for any provider.
-  const entryPoints: Array<Record<string, any>> =
-    event.conferenceData?.entryPoints ?? [];
+  const entryPoints = event.conferenceData?.entryPoints ?? [];
   for (const point of entryPoints) {
     if (point.entryPointType === "video" && point.uri) {
       return { url: point.uri, provider: detectProvider(point.uri) };
@@ -86,8 +100,8 @@ export async function getUpcomingMeetings(
     throw new Error(`Google Calendar failed (${response.status}): ${text}`);
   }
 
-  const data = await response.json();
-  const items: Array<Record<string, any>> = data.items ?? [];
+  const data = (await response.json()) as { items?: GoogleCalendarEvent[] };
+  const items = data.items ?? [];
 
   // Turn each raw Google event into our clean shape, keeping only ones with a
   // video link. `flatMap` lets us drop the ones we do not want by returning [].
