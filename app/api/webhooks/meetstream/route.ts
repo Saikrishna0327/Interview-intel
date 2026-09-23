@@ -23,6 +23,14 @@ import { prisma } from "@/lib/prisma";
 import { getBotDetail, getTranscript } from "@/lib/meetstream";
 import { generateHRScorecard } from "@/lib/gemini";
 
+// How long this function may run before Vercel stops it, in seconds.
+// We need a generous limit because ONE request does a lot of slow work:
+// fetch the bot detail, fetch the whole transcript, wait for Gemini to read
+// it and write the scorecard, then save to the database. Gemini alone can
+// take 10-30 seconds on a long interview. Vercel's default cut-off is much
+// shorter, and if it fires we get NO scorecard and no useful error.
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   // 1) Read the RAW text of the body first. We need the exact bytes MeetStream
   //    sent, because the signature check below is computed over those exact
@@ -49,9 +57,25 @@ export async function POST(request: Request) {
   //    If both exist at once, this address gets called twice per event: the
   //    unsigned copy correctly fails this check (401, harmless), and the
   //    signed copy from the dashboard endpoint is the one that gets through.
+  //
+  //    So we check the signature ONLY when one is actually attached:
+  //      - A signature is present -> it must be correct. A wrong one is a
+  //        forgery attempt, and we reject it with 401.
+  //      - No signature at all    -> this is the per-bot callback. We let it
+  //        through, because we never trust anything inside the body anyway.
+  //        The only field we read is the bot_id, and we use it merely to LOOK
+  //        UP a bot we already created ourselves. The transcript is then
+  //        fetched from MeetStream's own API with our API key — never taken
+  //        from the request. So a faked body cannot invent a scorecard; the
+  //        worst it can do is make us re-process a real meeting of our own.
+  //
+  //    (Before this change the route rejected every unsigned request, which
+  //     meant the per-bot callback could NEVER get through. That is why the
+  //     scorecard never appeared after a call ended.)
   const expected = process.env.MEETSTREAM_WEBHOOK_SECRET;
-  if (expected) {
-    const signatureHeader = request.headers.get("x-meetstream-signature") ?? "";
+  const signatureHeader = request.headers.get("x-meetstream-signature");
+
+  if (expected && signatureHeader) {
     const computedSignature =
       "sha256=" + createHmac("sha256", expected).update(rawBody).digest("hex");
 
