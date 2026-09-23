@@ -18,47 +18,76 @@
 //   video.processed, data_deletion.
 
 import { NextResponse } from "next/server";
+import { createHmac, timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getBotDetail, getTranscript } from "@/lib/meetstream";
 import { generateHRScorecard } from "@/lib/gemini";
 
 export async function POST(request: Request) {
-  // 1) Simple safety check: make sure the caller knows our shared secret.
-  //    MeetStream can send it as a header. If our secret is set and does not
-  //    match, we reject the message. (If no secret is set, we skip this in dev.)
+  // 1) Read the RAW text of the body first. We need the exact bytes MeetStream
+  //    sent, because the signature check below is computed over those exact
+  //    bytes. If we parsed it to JSON and re-stringified it, spacing could
+  //    differ and the signature would never match.
+  const rawBody = await request.text();
+
+  // 2) Simple safety check: make sure the caller knows our shared secret.
+  //    MeetStream detail: it does NOT send the secret itself as a header.
+  //    It sends `X-MeetStream-Signature: sha256=<hex>`, which is the raw body
+  //    run through HMAC-SHA256 with our secret as the key. So we must
+  //    calculate the SAME HMAC ourselves and compare the two hex strings, not
+  //    compare the header straight to our secret.
+  //    (If our secret is not set, we skip this in dev.)
+  //
+  //    IMPORTANT MeetStream detail: MeetStream has TWO separate ways to send
+  //    events to this same URL, and only one of them is signed.
+  //      - The per-bot `callback_url` we set in lib/meetstream.ts -> NEVER
+  //        signed. No X-MeetStream-Signature header at all.
+  //      - A "workspace webhook endpoint" registered in the MeetStream
+  //        dashboard (Configure -> Webhooks) that also points at this URL ->
+  //        IS signed, using a secret MeetStream generates and shows you once
+  //        when you create that endpoint.
+  //    If both exist at once, this address gets called twice per event: the
+  //    unsigned copy correctly fails this check (401, harmless), and the
+  //    signed copy from the dashboard endpoint is the one that gets through.
   const expected = process.env.MEETSTREAM_WEBHOOK_SECRET;
   if (expected) {
-    const provided =
-      request.headers.get("x-meetstream-signature") ??
-      request.headers.get("x-webhook-secret") ??
-      "";
-    if (provided !== expected) {
+    const signatureHeader = request.headers.get("x-meetstream-signature") ?? "";
+    const computedSignature =
+      "sha256=" + createHmac("sha256", expected).update(rawBody).digest("hex");
+
+    const provided = Buffer.from(signatureHeader);
+    const computed = Buffer.from(computedSignature);
+    const signatureMatches =
+      provided.length === computed.length && timingSafeEqual(provided, computed);
+
+    if (!signatureMatches) {
       return NextResponse.json({ error: "Bad signature" }, { status: 401 });
     }
   }
 
-  // 2) Read the message body. We read field names defensively, because the
-  //    exact JSON can differ slightly. We look for the event type, the bot id,
-  //    and the transcript id in a few possible spots.
-  const payload = (await request.json()) as Record<string, any>;
+  // 3) Now that the signature check is done, parse the body as JSON. We read
+  //    field names defensively, because the exact JSON can differ slightly.
+  //    We look for the event type, the bot id, and the transcript id in a few
+  //    possible spots.
+  const payload = JSON.parse(rawBody) as Record<string, any>;
 
   const eventType: string =
     payload.event ?? payload.event_type ?? payload.type ?? "";
   const botId: string | undefined =
     payload.bot_id ?? payload.botId ?? payload.data?.bot_id;
 
-  // 3) We only act on the "transcript is ready" event. For every other event
+  // 5) We only act on the "transcript is ready" event. For every other event
   //    we just reply 200 (OK) so MeetStream knows we received it.
   //    NOTE: this event does NOT carry a transcript_id (MeetStream detail —
   //    an earlier version of this code wrongly required one here, so it threw
   //    away every real event). We only need the bot_id at this point; we look
-  //    up the transcript_id ourselves in step 5.
+  //    up the transcript_id ourselves in step 7.
   if (eventType !== "transcription.processed" || !botId) {
     return NextResponse.json({ received: true });
   }
 
   try {
-    // 4) Find which meeting this bot belongs to (we saved the bot id earlier).
+    // 6) Find which meeting this bot belongs to (we saved the bot id earlier).
     const meeting = await prisma.interviewMeeting.findFirst({
       where: { meetstreamBotId: botId },
     });
@@ -68,7 +97,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ received: true, note: "meeting not found" });
     }
 
-    // 5) Ask MeetStream for this bot's own detail record. The transcript_id
+    // 7) Ask MeetStream for this bot's own detail record. The transcript_id
     //    lives there, not in the webhook body.
     const detail = await getBotDetail(botId);
     if (!detail.transcript_id) {
@@ -77,13 +106,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ received: true, note: "transcript not ready yet" });
     }
 
-    // 6) Fetch the full diarized transcript (who said what).
+    // 8) Fetch the full diarized transcript (who said what).
     const transcript = await getTranscript(detail.transcript_id);
 
-    // 7) Send it to Gemini and get the structured HR scorecard back.
+    // 9) Send it to Gemini and get the structured HR scorecard back.
     const scorecard = await generateHRScorecard(transcript);
 
-    // 8) Save the scorecard. `upsert` avoids duplicates if MeetStream retries.
+    // 10) Save the scorecard. `upsert` avoids duplicates if MeetStream retries.
     await prisma.interviewScorecard.upsert({
       where: { meetingId: meeting.id },
       update: {
@@ -111,7 +140,7 @@ export async function POST(request: Request) {
       },
     });
 
-    // 9) Mark the meeting as done.
+    // 11) Mark the meeting as done.
     await prisma.interviewMeeting.update({
       where: { id: meeting.id },
       data: { status: "SCORECARD_READY" },
