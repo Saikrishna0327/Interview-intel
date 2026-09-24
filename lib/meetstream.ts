@@ -153,10 +153,12 @@ export async function scheduleBot(
       // rejoins, then leave and start building the transcript. A longer wait
       // here only delays your scorecard.
       everyone_left_timeout: 120,
-      // Silence in the call. An interview has long quiet stretches, so we
-      // give it a full hour. The bot must never read "nobody is talking" as
-      // "the meeting is over".
-      voice_inactivity_timeout: 3600,
+      // Silence in the call. An interview has long quiet stretches, so we ask
+      // for the most MeetStream allows: 1800 seconds (30 minutes). The API
+      // rejects anything above that with
+      //   "voice_inactivity_timeout must not exceed 1800 seconds".
+      // The bot must never read "nobody is talking" as "the meeting is over".
+      voice_inactivity_timeout: 1800,
       // Hard cap on one recording: 4 hours. This is the value that stops a
       // bot dropping out of a long session. MeetStream rejects anything
       // below 600 seconds.
