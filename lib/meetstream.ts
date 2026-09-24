@@ -135,6 +135,36 @@ export async function scheduleBot(
     // We only need audio for a transcript, so video is off (lighter + faster).
     video_required: false,
     recording_config,
+    // WHEN THE BOT IS ALLOWED TO GIVE UP AND LEAVE. All values are seconds.
+    //
+    // We were sending nothing here before, so MeetStream used its own short
+    // defaults. That is why a bot could walk out in the middle of a real
+    // interview: a quiet stretch, or a long call, and it simply left.
+    //
+    // An interview has long silences. The candidate thinks. The interviewer
+    // reads a CV. Nobody speaks for a minute. The bot must WAIT through that,
+    // not treat it as an empty room. These are MeetStream's own recommended
+    // values for real meetings.
+    automatic_leave: {
+      // Nobody let the bot in from the waiting room. 10 minutes.
+      waiting_room_timeout: 600,
+      // Everybody hung up = the meeting ended. This is the trigger we WANT,
+      // so we keep it short: wait 2 minutes in case someone drops out and
+      // rejoins, then leave and start building the transcript. A longer wait
+      // here only delays your scorecard.
+      everyone_left_timeout: 120,
+      // Silence in the call. An interview has long quiet stretches, so we
+      // give it a full hour. The bot must never read "nobody is talking" as
+      // "the meeting is over".
+      voice_inactivity_timeout: 3600,
+      // Hard cap on one recording: 4 hours. This is the value that stops a
+      // bot dropping out of a long session. MeetStream rejects anything
+      // below 600 seconds.
+      in_call_recording_timeout: 14400,
+      // Zoom only: the host never approved recording. 5 minutes is the
+      // maximum MeetStream accepts.
+      recording_permission_denied_timeout: 300,
+    },
     // Where MeetStream should send its progress messages ("webhooks").
     // Our receiver lives at /api/webhooks/meetstream.
     callback_url: `${resolveBaseUrl()}/api/webhooks/meetstream`,
